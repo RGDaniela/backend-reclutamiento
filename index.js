@@ -25,6 +25,7 @@ mongoose.connect(MONGO_URI)
 
 // Esquema y Modelo de Candidato - ACTUALIZADO
 const CandidatoSchema = new mongoose.Schema({
+  correo: { type: String, default: null },  // correo del aspirante (Firebase) que vincula su cuenta con su postulación
   nombre: { type: String, required: true },
   cargo: { type: String, required: true },
   experienciaAnos: { type: Number, required: true },
@@ -47,7 +48,9 @@ const Candidato = mongoose.model('Candidato', CandidatoSchema);
 // Rutas API REST (CRUD)
 app.get('/api/candidatos', async (req, res) => {
   try {
-    const candidatos = await Candidato.find().sort({ createdAt: -1 });
+    // Si se envía ?correo=..., devuelve SOLO las postulaciones de ese aspirante
+    const filtro = req.query.correo ? { correo: req.query.correo } : {};
+    const candidatos = await Candidato.find(filtro).sort({ createdAt: -1 });
     res.json(candidatos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener candidatos', error });
