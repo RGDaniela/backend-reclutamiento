@@ -34,7 +34,9 @@ const CandidatoSchema = new mongoose.Schema({
     enum: ['En revisión', 'Entrevistado', 'Contratado', 'Rechazado'],
     default: 'En revisión' 
   },
-  fotoBase64: { type: String, default: null }
+  fotoBase64: { type: String, default: null },
+  hojaVidaBase64: { type: String, default: null },  // hoja de vida (PDF) en Base64
+  hojaVidaNombre: { type: String, default: null }   // nombre original del archivo PDF
 }, { timestamps: true });
 
 CandidatoSchema.method('toJSON', function() {
@@ -44,6 +46,31 @@ CandidatoSchema.method('toJSON', function() {
 });
 
 const Candidato = mongoose.model('Candidato', CandidatoSchema);
+
+// Límite de tamaño para la hoja de vida (5 MB) y validación de que sea PDF
+const MAX_HOJA_VIDA_BYTES = 5 * 1024 * 1024;
+
+function validarHojaVida(hojaVidaBase64, hojaVidaNombre) {
+  // Si no se envía hoja de vida, no hay nada que validar
+  if (hojaVidaBase64 === null || hojaVidaBase64 === undefined) return null;
+
+  if (typeof hojaVidaBase64 !== 'string' || !/^data:application\/pdf;base64,/i.test(hojaVidaBase64)) {
+    return 'Solo se aceptan archivos PDF para la hoja de vida.';
+  }
+
+  // El tamaño del PDF se calcula decodificando el Base64 (sin el prefijo data:)
+  const contenido = hojaVidaBase64.split(',')[1] || '';
+  const tamanoBytes = Math.floor((contenido.length * 3) / 4) - (contenido.endsWith('==') ? 2 : contenido.endsWith('=') ? 1 : 0);
+  if (tamanoBytes > MAX_HOJA_VIDA_BYTES) {
+    return 'La hoja de vida supera el límite de 5 MB.';
+  }
+
+  if (hojaVidaNombre && !/\.pdf$/i.test(hojaVidaNombre)) {
+    return 'El archivo de hoja de vida debe tener extensión .pdf';
+  }
+
+  return null;
+}
 
 // Rutas API REST (CRUD)
 app.get('/api/candidatos', async (req, res) => {
@@ -60,6 +87,13 @@ app.get('/api/candidatos', async (req, res) => {
 app.post('/api/candidatos', async (req, res) => {
   try {
     console.log("📥 Datos recibidos desde la app:", req.body); // <-- Para ver qué llega exactamente
+
+    // Validación de la hoja de vida (solo PDF y máximo 5 MB)
+    const errorHojaVida = validarHojaVida(req.body.hojaVidaBase64, req.body.hojaVidaNombre);
+    if (errorHojaVida) {
+      return res.status(400).json({ mensaje: 'Error al crear candidato', error: errorHojaVida });
+    }
+
     const nuevoCandidato = new Candidato(req.body);
     const candidatoGuardado = await nuevoCandidato.save();
     res.status(201).json(candidatoGuardado);
@@ -71,6 +105,12 @@ app.post('/api/candidatos', async (req, res) => {
 
 app.put('/api/candidatos/:id', async (req, res) => {
   try {
+    // Validación de la hoja de vida (solo PDF y máximo 5 MB)
+    const errorHojaVida = validarHojaVida(req.body.hojaVidaBase64, req.body.hojaVidaNombre);
+    if (errorHojaVida) {
+      return res.status(400).json({ mensaje: 'Error al actualizar', error: errorHojaVida });
+    }
+
     const candidatoActualizado = await Candidato.findByIdAndUpdate(
       req.params.id, 
       req.body, 
